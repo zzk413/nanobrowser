@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { BaseAgent, type BaseAgentOptions, type ExtraAgentOptions } from './base';
 import { createLogger } from '@src/background/log';
-import { ActionResult, type AgentOutput } from '../types';
-import type { Action } from '../actions/builder';
+import { ActionResult, type AgentContext, type AgentOutput } from '../types';
+import { Action } from '../actions/builder';
 import { buildDynamicActionSchema } from '../actions/builder';
 import { agentBrainSchema } from '../types';
 import { type BaseMessage, HumanMessage } from '@langchain/core/messages';
@@ -28,6 +28,10 @@ import { convertZodToJsonSchema, repairJsonString } from '@src/background/utils'
 import { HistoryTreeProcessor } from '@src/background/browser/dom/history/service';
 import { AgentStepRecord } from '../history';
 import { type DOMHistoryElement } from '@src/background/browser/dom/history/view';
+import type { ActionSchema } from '../actions/schemas';
+import type { MCPTool } from '../../mcp/types';
+import { jsonSchemaToZod } from '../../mcp/types';
+import { MCPManager } from '../../mcp/manager';
 
 const logger = createLogger('NavigatorAgent');
 
@@ -40,8 +44,10 @@ interface ParsedModelOutput {
 
 export class NavigatorActionRegistry {
   private actions: Record<string, Action> = {};
+  private context: AgentContext | null = null;
 
-  constructor(actions: Action[]) {
+  constructor(actions: Action[], context?: AgentContext) {
+    if (context) this.context = context;
     for (const action of actions) {
       this.registerAction(action);
     }
@@ -57,6 +63,40 @@ export class NavigatorActionRegistry {
 
   getAction(name: string): Action | undefined {
     return this.actions[name];
+  }
+
+  registerMCPTool(tool: MCPTool): void {
+    if (!this.context) {
+      throw new Error('Cannot register MCP tool without AgentContext');
+    }
+    const context = this.context;
+    const zodSchema = jsonSchemaToZod(tool.inputSchema);
+    const actionSchema: ActionSchema = {
+      name: tool.name,
+      description: `[MCP] ${tool.description}`,
+      schema: zodSchema,
+    };
+    const action = new Action(
+      async (input: unknown) => {
+        const inputRecord = (input || {}) as Record<string, unknown>;
+        context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, `MCP: ${tool.name}`);
+        try {
+          const result = await MCPManager.getInstance().executeTool(tool.name, inputRecord);
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, `MCP: ${tool.name} succeeded`);
+          return new ActionResult({
+            extractedContent: result,
+            includeInMemory: true,
+          });
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_FAIL, `MCP: ${tool.name} failed: ${errorMsg}`);
+          return new ActionResult({ error: errorMsg, includeInMemory: true });
+        }
+      },
+      actionSchema,
+      false,
+    );
+    this.registerAction(action);
   }
 
   setupModelOutputSchema(): z.ZodType {
