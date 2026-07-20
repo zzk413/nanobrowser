@@ -5,8 +5,10 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatXAI } from '@langchain/xai';
 import { ChatGroq } from '@langchain/groq';
 import { ChatCerebras } from '@langchain/cerebras';
-import { ChatVertexAI } from '@langchain/google-vertexai';
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { AIMessage, type BaseMessage } from '@langchain/core/messages';
+import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
+import type { ChatResult } from '@langchain/core/outputs';
 import { ChatOllama } from '@langchain/ollama';
 import { ChatDeepSeek } from '@langchain/deepseek';
 
@@ -57,6 +59,97 @@ class ChatLlama extends ChatOpenAI {
       console.error(`[ChatLlama] Error during API call:`, error);
       throw error;
     }
+  }
+}
+
+// Custom ChatVertexAI class for Google Cloud Platform (Vertex AI) via REST API
+class ChatVertexAI extends BaseChatModel {
+  private modelName: string;
+  private temperatureVal: number;
+  private topPVal: number;
+  private projectId: string;
+  private locationVal: string;
+  private accessToken: string;
+
+  constructor(fields: {
+    model?: string;
+    temperature?: number;
+    topP?: number;
+    project?: string;
+    location?: string;
+    authOptions?: { credentials: { access_token: string; token_type: string } };
+  }) {
+    super({});
+    this.modelName = fields.model ?? 'gemini-2.5-flash';
+    this.temperatureVal = fields.temperature ?? 0.1;
+    this.topPVal = fields.topP ?? 0.1;
+    this.projectId = fields.project ?? '';
+    this.locationVal = fields.location ?? 'global';
+    this.accessToken = fields.authOptions?.credentials?.access_token ?? '';
+  }
+
+  _llmType(): string {
+    return 'vertexai';
+  }
+
+  _modelType(): string {
+    return 'chat';
+  }
+
+  async _generate(
+    messages: BaseMessage[],
+    _options: this['ParsedCallOptions'],
+    _runManager?: CallbackManagerForLLMRun,
+  ): Promise<ChatResult> {
+    const contents = messages
+      .filter(m => m._getType() === 'human' || m._getType() === 'ai')
+      .map(m => ({
+        role: m._getType() === 'ai' ? 'model' : 'user',
+        parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
+      }));
+
+    const systemMsg = messages.find(m => m._getType() === 'system');
+    const body: Record<string, unknown> = {
+      contents,
+      generationConfig: {
+        temperature: this.temperatureVal,
+        topP: this.topPVal,
+      },
+    };
+    if (systemMsg && typeof systemMsg.content === 'string') {
+      body.systemInstruction = {
+        parts: [{ text: systemMsg.content }],
+      };
+    }
+
+    const url = `https://aiplatform.googleapis.com/v1/projects/${encodeURIComponent(this.projectId)}/locations/${encodeURIComponent(this.locationVal)}/publishers/google/models/${encodeURIComponent(this.modelName)}:generateContent`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.accessToken}`,
+      },
+      body: JSON.stringify(body),
+      signal: _options?.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Vertex AI error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? '';
+
+    return {
+      generations: [
+        {
+          message: new AIMessage(text),
+          text,
+        },
+      ],
+    };
   }
 }
 
