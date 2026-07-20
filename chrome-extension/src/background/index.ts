@@ -18,6 +18,8 @@ import { DEFAULT_AGENT_OPTIONS } from './agent/types';
 import { SpeechToTextService } from './services/speechToText';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
+import { MCPManager } from './mcp/manager';
+import { buildMCPToolsDescription } from './mcp/types';
 
 const logger = createLogger('background');
 
@@ -53,6 +55,12 @@ chrome.tabs.onRemoved.addListener(tabId => {
 });
 
 logger.info('background loaded');
+
+MCPManager.getInstance()
+  .init()
+  .catch(error => {
+    logger.warning('MCP manager init failed (non-fatal):', error instanceof Error ? error.message : String(error));
+  });
 
 // Initialize analytics
 analytics.init().catch(error => {
@@ -319,8 +327,14 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
     displayHighlights: generalSettings.displayHighlights,
   });
 
+  const mcpManager = MCPManager.getInstance();
+  const mcpTools = mcpManager.getTools();
+  const mcpToolsDescription = buildMCPToolsDescription(mcpTools);
+
   const executor = new Executor(task, taskId, browserContext, navigatorLLM, {
     plannerLLM: plannerLLM ?? navigatorLLM,
+    mcpTools: mcpTools.length > 0 ? mcpTools : undefined,
+    mcpToolsDescription: mcpToolsDescription || undefined,
     agentOptions: {
       maxSteps: generalSettings.maxSteps,
       maxFailures: generalSettings.maxFailures,
