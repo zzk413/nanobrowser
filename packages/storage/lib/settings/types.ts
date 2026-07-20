@@ -20,6 +20,7 @@ export enum ProviderTypeEnum {
   Cerebras = 'cerebras',
   Llama = 'llama',
   CustomOpenAI = 'custom_openai',
+  GooglePlatform = 'google_platform',
 }
 
 // Default supported models for each built-in provider
@@ -49,6 +50,7 @@ export const llmProviderModelNames = {
     'Llama-4-Maverick-17B-128E-Instruct-FP8',
     'Llama-4-Scout-17B-16E-Instruct-FP8',
   ],
+  [ProviderTypeEnum.GooglePlatform]: ['gemini-2.5-flash', 'gemini-2.5-pro'],
   // Custom OpenAI providers don't have predefined models as they are user-defined
 };
 
@@ -145,6 +147,16 @@ export const llmProviderParameters = {
     },
   },
   [ProviderTypeEnum.Llama]: {
+    [AgentNameEnum.Planner]: {
+      temperature: 0.7,
+      topP: 0.9,
+    },
+    [AgentNameEnum.Navigator]: {
+      temperature: 0.3,
+      topP: 0.85,
+    },
+  },
+  [ProviderTypeEnum.GooglePlatform]: {
     [AgentNameEnum.Planner]: {
       temperature: 0.7,
       topP: 0.9,

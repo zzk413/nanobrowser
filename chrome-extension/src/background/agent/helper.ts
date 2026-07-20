@@ -5,6 +5,7 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatXAI } from '@langchain/xai';
 import { ChatGroq } from '@langchain/groq';
 import { ChatCerebras } from '@langchain/cerebras';
+import { ChatVertexAI } from '@langchain/google-vertexai';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOllama } from '@langchain/ollama';
 import { ChatDeepSeek } from '@langchain/deepseek';
@@ -288,6 +289,28 @@ export function createChatModel(providerConfig: ProviderConfig, modelConfig: Mod
         topP,
       };
       return new ChatGoogleGenerativeAI(args);
+    }
+    case ProviderTypeEnum.GooglePlatform: {
+      const args: Record<string, unknown> = {
+        model: modelConfig.modelName,
+        temperature,
+        topP,
+      };
+      if (providerConfig.projectId) {
+        args.project = providerConfig.projectId;
+      }
+      if (providerConfig.location) {
+        args.location = providerConfig.location;
+      }
+      if (providerConfig.apiKey) {
+        args.authOptions = {
+          credentials: {
+            access_token: providerConfig.apiKey,
+            token_type: 'Bearer',
+          },
+        };
+      }
+      return new ChatVertexAI(args);
     }
     case ProviderTypeEnum.Grok: {
       const args = {

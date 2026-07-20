@@ -85,6 +85,7 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
     if (toolCallingMethod === 'auto') {
       switch (this.chatModelLibrary) {
         case 'ChatGoogleGenerativeAI':
+        case 'ChatVertexAI':
           return null;
         case 'ChatOpenAI':
         case 'AzureChatOpenAI':

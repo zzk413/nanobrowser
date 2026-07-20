@@ -7,15 +7,16 @@ const AZURE_API_VERSION = '2025-04-01-preview';
 
 // Interface for a single provider configuration
 export interface ProviderConfig {
-  name?: string; // Display name in the options
-  type?: ProviderTypeEnum; // Help to decide which LangChain ChatModel package to use
-  apiKey: string; // Must be provided, but may be empty for local models
-  baseUrl?: string; // Optional base URL if provided // For Azure: Endpoint
-  modelNames?: string[]; // Chosen model names (NOT used for Azure OpenAI)
-  createdAt?: number; // Timestamp in milliseconds when the provider was created
-  // Azure Specific Fields:
-  azureDeploymentNames?: string[]; // Azure deployment names array
+  name?: string;
+  type?: ProviderTypeEnum;
+  apiKey: string;
+  baseUrl?: string;
+  modelNames?: string[];
+  createdAt?: number;
+  azureDeploymentNames?: string[];
   azureApiVersion?: string;
+  projectId?: string;
+  location?: string;
 }
 
 // Interface for storing multiple LLM provider configurations
@@ -62,6 +63,7 @@ export function getProviderTypeByProviderId(providerId: string): ProviderTypeEnu
     case ProviderTypeEnum.Anthropic:
     case ProviderTypeEnum.DeepSeek:
     case ProviderTypeEnum.Gemini:
+    case ProviderTypeEnum.GooglePlatform:
     case ProviderTypeEnum.Grok:
     case ProviderTypeEnum.Ollama:
     case ProviderTypeEnum.OpenRouter:
@@ -99,6 +101,8 @@ export function getDefaultDisplayNameFromProviderId(providerId: string): string 
       return 'Cerebras';
     case ProviderTypeEnum.Llama:
       return 'Llama';
+    case ProviderTypeEnum.GooglePlatform:
+      return 'Google Cloud Platform';
     default:
       return providerId; // Use the provider id as display name for custom providers by default
   }
@@ -148,6 +152,16 @@ export function getDefaultProviderConfig(providerId: string): ProviderConfig {
         // modelNames: [], // Not used for Azure configuration
         azureDeploymentNames: [], // Azure deployment names
         azureApiVersion: AZURE_API_VERSION, // Provide a common default API version
+        createdAt: Date.now(),
+      };
+    case ProviderTypeEnum.GooglePlatform:
+      return {
+        apiKey: '',
+        name: getDefaultDisplayNameFromProviderId(providerId),
+        type: providerId,
+        modelNames: [...(llmProviderModelNames[providerId] || [])],
+        projectId: '',
+        location: 'global',
         createdAt: Date.now(),
       };
     default: // Handles CustomOpenAI
@@ -204,7 +218,19 @@ function ensureBackwardCompatibility(providerId: string, config: ProviderConfig)
       // console.log(`[ensureBackwardCompatibility] Deleting modelNames for Azure config ${providerId}`);
       delete updatedConfig.modelNames;
     }
-  } else {
+  }
+
+  // Handle Google Platform specifics
+  if (updatedConfig.type === ProviderTypeEnum.GooglePlatform) {
+    if (!updatedConfig.projectId) {
+      updatedConfig.projectId = '';
+    }
+    if (!updatedConfig.location) {
+      updatedConfig.location = 'global';
+    }
+  }
+
+  if (updatedConfig.type !== ProviderTypeEnum.AzureOpenAI) {
     // Ensure modelNames exists ONLY for non-Azure types
     if (!updatedConfig.modelNames) {
       // console.log(`[ensureBackwardCompatibility] Adding default modelNames for non-Azure ${providerId}`);
@@ -254,6 +280,12 @@ export const llmProviderStore: LLMProviderStorage = {
       }
     }
 
+    if (providerType === ProviderTypeEnum.GooglePlatform) {
+      if (!config.projectId?.trim()) {
+        throw new Error('Project ID is required for Google Cloud Platform');
+      }
+    }
+
     if (providerType !== ProviderTypeEnum.AzureOpenAI) {
       if (!config.modelNames || config.modelNames.length === 0) {
         console.warn(`Provider ${providerId} of type ${providerType} is being saved without model names.`);
@@ -266,6 +298,12 @@ export const llmProviderStore: LLMProviderStorage = {
       name: config.name || getDefaultDisplayNameFromProviderId(providerId),
       type: providerType,
       createdAt: config.createdAt || Date.now(),
+      ...(providerType === ProviderTypeEnum.GooglePlatform
+        ? {
+            projectId: config.projectId || '',
+            location: config.location || 'global',
+          }
+        : {}),
       ...(providerType === ProviderTypeEnum.AzureOpenAI
         ? {
             azureDeploymentNames: config.azureDeploymentNames || [],

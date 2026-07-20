@@ -275,6 +275,28 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
     }));
   };
 
+  const handleProjectIdChange = (provider: string, projectId: string) => {
+    setModifiedProviders(prev => new Set(prev).add(provider));
+    setProviders(prev => ({
+      ...prev,
+      [provider]: {
+        ...prev[provider],
+        projectId: projectId.trim(),
+      },
+    }));
+  };
+
+  const handleLocationChange = (provider: string, location: string) => {
+    setModifiedProviders(prev => new Set(prev).add(provider));
+    setProviders(prev => ({
+      ...prev,
+      [provider]: {
+        ...prev[provider],
+        location: location.trim(),
+      },
+    }));
+  };
+
   // Add a toggle handler for API key visibility
   const toggleApiKeyVisibility = (provider: string) => {
     setVisibleApiKeys(prev => ({
@@ -412,6 +434,9 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
     } else if (providerType === ProviderTypeEnum.Llama) {
       // Llama needs API Key and Base URL
       hasInput = Boolean(config?.apiKey?.trim()) && Boolean(config?.baseUrl?.trim());
+    } else if (providerType === ProviderTypeEnum.GooglePlatform) {
+      // Google Platform needs API Key (access token) and Project ID
+      hasInput = Boolean(config?.apiKey?.trim()) && Boolean(config?.projectId?.trim());
     } else {
       // Other built-in providers just need API Key
       hasInput = Boolean(config?.apiKey?.trim());
@@ -474,9 +499,14 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
         configToSave.modelNames = undefined;
       } else {
         // Ensure modelNames IS included for non-Azure
-        // Use existing modelNames from state, or default if somehow missing
         configToSave.modelNames =
           providers[provider].modelNames || llmProviderModelNames[provider as keyof typeof llmProviderModelNames] || [];
+      }
+
+      // Google Platform: ensure projectId and location are set
+      if (providers[provider].type === ProviderTypeEnum.GooglePlatform) {
+        configToSave.projectId = providers[provider].projectId || '';
+        configToSave.location = providers[provider].location || 'global';
       }
 
       // Pass the cleaned config to setProvider
@@ -1228,7 +1258,9 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
                       <label
                         htmlFor={`${providerId}-api-key`}
                         className={`w-20 text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                        {t('options_models_providers_apiKey')}
+                        {providerConfig.type === ProviderTypeEnum.GooglePlatform
+                          ? 'Access Token'
+                          : t('options_models_providers_apiKey')}
                         {/* Show asterisk only if required */}
                         {providerConfig.type !== ProviderTypeEnum.CustomOpenAI &&
                         providerConfig.type !== ProviderTypeEnum.Ollama
@@ -1244,7 +1276,9 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
                               ? t('options_models_providers_apiKey_placeholder_optional')
                               : providerConfig.type === ProviderTypeEnum.Ollama
                                 ? t('options_models_providers_apiKey_placeholder_ollama')
-                                : t('options_models_providers_apiKey_placeholder_required')
+                                : providerConfig.type === ProviderTypeEnum.GooglePlatform
+                                  ? 'Enter GCP access token (Bearer token)'
+                                  : t('options_models_providers_apiKey_placeholder_required')
                           }
                           value={providerConfig.apiKey || ''}
                           onChange={e => handleApiKeyChange(providerId, e.target.value, providerConfig.baseUrl)}
@@ -1308,6 +1342,42 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
                           </p>
                         </div>
                       )}
+
+                    {/* Google Platform specific fields: Project ID and Location */}
+                    {providerConfig.type === ProviderTypeEnum.GooglePlatform && (
+                      <>
+                        <div className="flex items-center mt-2">
+                          <label
+                            htmlFor={`${providerId}-project-id`}
+                            className={`w-20 text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Project ID*
+                          </label>
+                          <input
+                            id={`${providerId}-project-id`}
+                            type="text"
+                            placeholder="my-gcp-project"
+                            value={providerConfig.projectId || ''}
+                            onChange={e => handleProjectIdChange(providerId, e.target.value)}
+                            className={inputClasses}
+                          />
+                        </div>
+                        <div className="flex items-center mt-2">
+                          <label
+                            htmlFor={`${providerId}-location`}
+                            className={`w-20 text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Location
+                          </label>
+                          <input
+                            id={`${providerId}-location`}
+                            type="text"
+                            placeholder="global"
+                            value={providerConfig.location || ''}
+                            onChange={e => handleLocationChange(providerId, e.target.value)}
+                            className={inputClasses}
+                          />
+                        </div>
+                      </>
+                    )}
 
                     {/* Base URL input (for custom_openai, ollama, azure_openai, openrouter, and llama) */}
                     {(providerConfig.type === ProviderTypeEnum.CustomOpenAI ||
