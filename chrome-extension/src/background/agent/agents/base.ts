@@ -116,6 +116,11 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
       return false;
     }
 
+    // ChatVertexAI (GooglePlatform) doesn't support bindTools/structured output
+    if (this.chatLLM._llmType() === 'vertexai') {
+      return false;
+    }
+
     return true;
   }
 
