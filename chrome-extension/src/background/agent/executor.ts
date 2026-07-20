@@ -25,12 +25,15 @@ import { chatHistoryStore } from '@extension/storage/lib/chat';
 import type { AgentStepHistory } from './history';
 import type { GeneralSettingsConfig } from '@extension/storage';
 import { analytics } from '../services/analytics';
+import type { MCPTool } from '../mcp/types';
 
 const logger = createLogger('Executor');
 
 export interface ExecutorExtraArgs {
   plannerLLM?: BaseChatModel;
   extractorLLM?: BaseChatModel;
+  mcpTools?: MCPTool[];
+  mcpToolsDescription?: string;
   agentOptions?: Partial<AgentOptions>;
   generalSettings?: GeneralSettingsConfig;
 }
@@ -66,10 +69,16 @@ export class Executor {
     this.generalSettings = extraArgs?.generalSettings;
     this.tasks.push(task);
     this.navigatorPrompt = new NavigatorPrompt(context.options.maxActionsPerStep);
-    this.plannerPrompt = new PlannerPrompt();
+    this.plannerPrompt = new PlannerPrompt(extraArgs?.mcpToolsDescription);
 
     const actionBuilder = new ActionBuilder(context, extractorLLM);
-    const navigatorActionRegistry = new NavigatorActionRegistry(actionBuilder.buildDefaultActions());
+    const navigatorActionRegistry = new NavigatorActionRegistry(actionBuilder.buildDefaultActions(), context);
+
+    if (extraArgs?.mcpTools) {
+      for (const tool of extraArgs.mcpTools) {
+        navigatorActionRegistry.registerMCPTool(tool);
+      }
+    }
 
     // Initialize agents with their respective prompts
     this.navigator = new NavigatorAgent(navigatorActionRegistry, {
