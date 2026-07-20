@@ -1358,7 +1358,7 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
                             placeholder="my-gcp-project"
                             value={providerConfig.projectId || ''}
                             onChange={e => handleProjectIdChange(providerId, e.target.value)}
-                            className={inputClasses}
+                            className={`flex-1 rounded-md border text-sm ${isDarkMode ? 'border-slate-600 bg-slate-700 text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-800' : 'border-gray-300 bg-white text-gray-700 focus:border-blue-400 focus:ring-2 focus:ring-blue-200'} p-2 outline-none`}
                           />
                         </div>
                         <div className="flex items-center mt-2">
@@ -1373,7 +1373,7 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
                             placeholder="global"
                             value={providerConfig.location || ''}
                             onChange={e => handleLocationChange(providerId, e.target.value)}
-                            className={inputClasses}
+                            className={`flex-1 rounded-md border text-sm ${isDarkMode ? 'border-slate-600 bg-slate-700 text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-800' : 'border-gray-300 bg-white text-gray-700 focus:border-blue-400 focus:ring-2 focus:ring-blue-200'} p-2 outline-none`}
                           />
                         </div>
                       </>
